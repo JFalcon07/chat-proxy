@@ -13,9 +13,13 @@ const bodyParser = require("body-parser");
 const axios_1 = require("axios");
 const config_1 = require("./config");
 const auth_routes_1 = require("./auth-routes");
+const socketIo = require("socket.io");
+const http = require("http");
 require("./auth-routes");
 const port = 3000;
 const app = express();
+const server = http.createServer(app);
+const io = socketIo(server);
 app.use(bodyParser.json()); // for parsing application/json
 app.use(bodyParser.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
 app.use(function (req, res, next) {
@@ -60,13 +64,59 @@ app.post('/Conversations', (req, res) => {
 app.get('/conversation/:tagId', function (req, res) {
     const config = auth_routes_1.axiosConfig(config_1.notiServer + '/getConversation', { token: req.get('Authorization'), _id: req.params.tagId });
     axios_1.default(config).then((response => {
-        console.log(response.data);
-        // res.json(response.data);
+        res.json(response.data);
     })).catch((error) => {
-        // res.send(error.response.data);
+        res.send(error.response.data);
     });
-    res.json("tagId is set to " + req.params.tagId);
 });
-app.listen(port, () => {
+// app.post('/message',(req,res)=>{
+//     const config: AxiosRequestConfig = axiosConfig(notiServer+'/newMessage',req.body);
+//     axios(config).then((response=>{
+//         res.json(response.data);
+//     })).catch((error)=>{
+//         res.send(error.response.data);
+//     });
+// })
+app.post('/auth', (req, res) => {
+    const config = {
+        method: 'POST',
+        url: config_1.authServer + '/auth',
+        data: null,
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'jwt ' + req.body.token
+        }
+    };
+    axios_1.default(config).then((response => {
+        res.json(response.data);
+    })).catch((error) => {
+        res.send(error.response.data);
+    });
+});
+io.on('connection', (socket) => {
+    socket.on('message', function (data) {
+        const config = auth_routes_1.axiosConfig(config_1.notiServer + '/newMessage', data);
+        axios_1.default(config).then((response => {
+            const message = {
+                sender: data.user,
+                message: data.message,
+                type: data.type,
+                date: data.date
+            };
+            io.sockets.in(data._id).emit('message', message);
+        })).catch((error) => {
+            console.log(error.response);
+        });
+    });
+    socket.on('join', function (data) {
+        socket.join(data);
+        socket.broadcast.to(data).emit('joined', { sender: null, message: `hello fron ${data}` });
+    });
+    socket.on('leave', function (data) {
+        socket.leaveAll();
+        socket.broadcast.to(data).emit('joined', { sender: null, message: `hello fron ${data}` });
+    });
+});
+server.listen(port, () => {
     console.log(`Proxy Server is up on port ${port}`);
 });
