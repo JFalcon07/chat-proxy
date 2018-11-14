@@ -20,6 +20,7 @@ const port = 3000;
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
+let users = [];
 app.use(bodyParser.json()); // for parsing application/json
 app.use(bodyParser.urlencoded({ extended: true })); // for parsing application/x-www-form-urlencoded
 app.use(function (req, res, next) {
@@ -37,14 +38,6 @@ app.post('/users', (req, res) => __awaiter(this, void 0, void 0, function* () {
         res.send(error.response.data);
     });
 }));
-app.post('/add', (req, res) => {
-    const config = auth_routes_1.axiosConfig(config_1.notiServer + '/addUser', req.body);
-    axios_1.default(config).then((response => {
-        res.send(response.data);
-    })).catch((error) => {
-        res.send(error.response.data);
-    });
-});
 app.post('/contacts', (req, res) => {
     const config = auth_routes_1.axiosConfig(config_1.notiServer + '/getContacts', req.body);
     axios_1.default(config).then((response => {
@@ -69,14 +62,6 @@ app.get('/conversation/:tagId', function (req, res) {
         res.send(error.response.data);
     });
 });
-// app.post('/message',(req,res)=>{
-//     const config: AxiosRequestConfig = axiosConfig(notiServer+'/newMessage',req.body);
-//     axios(config).then((response=>{
-//         res.json(response.data);
-//     })).catch((error)=>{
-//         res.send(error.response.data);
-//     });
-// })
 app.post('/auth', (req, res) => {
     const config = {
         method: 'POST',
@@ -96,14 +81,54 @@ app.post('/auth', (req, res) => {
 io.on('connection', (socket) => {
     socket.on('message', function (data) {
         const config = auth_routes_1.axiosConfig(config_1.notiServer + '/newMessage', data);
-        axios_1.default(config).then((response => {
+        axios_1.default(config).then(() => {
             const message = {
+                room: data._id,
                 sender: data.user,
                 message: data.message,
                 type: data.type,
                 date: data.date
             };
             io.sockets.in(data._id).emit('message', message);
+        }).catch((error) => {
+            console.log(error.response);
+        });
+    });
+    socket.on('linkUser', function (data) {
+        const user = {
+            socket: socket.id,
+            user: data
+        };
+        users.push(user);
+    });
+    socket.on('addUser', data => {
+        const config = auth_routes_1.axiosConfig(config_1.notiServer + '/addUser', data);
+        axios_1.default(config).then((response => {
+            if (response.data.participants) {
+                response.data.participants.forEach(user => {
+                    for (let i = 0; i < users.length; i++) {
+                        if (user._id === users[i].user) {
+                            io.to(`${users[i].socket}`).emit('addedUser', response.data);
+                        }
+                    }
+                });
+                return false;
+            }
+            socket.emit('addedUser', response.data);
+        })).catch((error) => {
+            console.log(error.response);
+        });
+    });
+    socket.on('addConversation', data => {
+        const config = auth_routes_1.axiosConfig(config_1.notiServer + '/newConversation', data);
+        axios_1.default(config).then((response => {
+            response.data.conversation.participants.forEach(user => {
+                for (let i = 0; i < users.length; i++) {
+                    if (user._id === users[i].user) {
+                        io.to(`${users[i].socket}`).emit('newConversation', response.data);
+                    }
+                }
+            });
         })).catch((error) => {
             console.log(error.response);
         });
@@ -115,6 +140,9 @@ io.on('connection', (socket) => {
     socket.on('leave', function (data) {
         socket.leaveAll();
         socket.broadcast.to(data).emit('joined', { sender: null, message: `hello fron ${data}` });
+    });
+    socket.on('disconnect', () => {
+        users = users.filter(e => e.socket !== socket.id);
     });
 });
 server.listen(port, () => {
