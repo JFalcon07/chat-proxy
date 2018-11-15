@@ -95,10 +95,14 @@ io.on('connection', (socket) => {
         });
     });
     socket.on('linkUser', function (data) {
+        users.forEach((element) => {
+            socket.emit('online', element.user);
+        });
         const user = {
             socket: socket.id,
             user: data
         };
+        socket.broadcast.emit('online', data);
         users.push(user);
     });
     socket.on('addUser', data => {
@@ -142,7 +146,11 @@ io.on('connection', (socket) => {
         socket.broadcast.to(data).emit('joined', { sender: null, message: `hello fron ${data}` });
     });
     socket.on('disconnect', () => {
+        const user = users.filter(e => e.socket === socket.id)[0];
         users = users.filter(e => e.socket !== socket.id);
+        if (user) {
+            socket.broadcast.emit('offline', user.user);
+        }
     });
 });
 server.listen(port, () => {

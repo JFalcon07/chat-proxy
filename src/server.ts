@@ -7,6 +7,7 @@ import * as socketIo from 'socket.io';
 import * as http from 'http';
 
 import './auth-routes';
+import { connect } from "net";
 
 const port = 3000;
 const app = express();
@@ -96,10 +97,14 @@ io.on('connection', (socket) => {
     });
 
     socket.on('linkUser', function(data) {
+        users.forEach((element) => {
+            socket.emit('online', element.user);
+        });
         const user = {
             socket: socket.id,
             user: data
         }
+        socket.broadcast.emit('online',data);
         users.push(user);
     })
 
@@ -148,7 +153,11 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
+        const user = users.filter(e => e.socket === socket.id)[0];
         users = users.filter(e => e.socket !== socket.id);
+        if(user){
+        socket.broadcast.emit('offline',user.user)
+        }
       });
 });
 
