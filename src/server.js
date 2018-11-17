@@ -38,6 +38,14 @@ app.post('/users', (req, res) => __awaiter(this, void 0, void 0, function* () {
         res.send(error.response.data);
     });
 }));
+app.post('/userInfo', (req, res) => __awaiter(this, void 0, void 0, function* () {
+    const config = auth_routes_1.axiosConfig(config_1.notiServer + '/getUser', req.body);
+    axios_1.default(config).then((response => {
+        res.send(response.data);
+    })).catch((error) => {
+        res.send(error.response.data);
+    });
+}));
 app.post('/contacts', (req, res) => {
     const config = auth_routes_1.axiosConfig(config_1.notiServer + '/getContacts', req.body);
     axios_1.default(config).then((response => {
@@ -95,9 +103,11 @@ io.on('connection', (socket) => {
         });
     });
     socket.on('linkUser', function (data) {
-        users.forEach((element) => {
-            socket.emit('online', element.user);
-        });
+        if (users.length > 0) {
+            users.forEach((element) => {
+                socket.emit('online', element.user);
+            });
+        }
         const user = {
             socket: socket.id,
             user: data
@@ -116,6 +126,12 @@ io.on('connection', (socket) => {
                         }
                     }
                 });
+                for (let i = 0; i < users.length; i++) {
+                    if (response.data.participants[1]._id === users[i].user) {
+                        io.to(`${users[i].socket}`).emit('online', response.data.participants[0]._id);
+                        socket.broadcast.emit('online', response.data.participants[1]._id);
+                    }
+                }
                 return false;
             }
             socket.emit('addedUser', response.data);
@@ -144,6 +160,42 @@ io.on('connection', (socket) => {
     socket.on('leave', function (data) {
         socket.leaveAll();
         socket.broadcast.to(data).emit('joined', { sender: null, message: `hello fron ${data}` });
+    });
+    socket.on('remove', function (data) {
+        const config = auth_routes_1.axiosConfig(config_1.notiServer + '/remove', data);
+        axios_1.default(config).then(() => {
+            const other = users.filter(e => e.user == data.contact)[0];
+            if (other) {
+                io.to(`${other.socket}`).emit('removedContact', { user: data.user, conversation: data.conversation });
+            }
+            socket.emit('removedContact', { user: data.contact, conversation: data.conversation });
+        }).catch((error) => {
+            console.log(error.response);
+        });
+    });
+    socket.on('changePassword', function (data) {
+        const config = auth_routes_1.axiosConfig(config_1.authServer + '/changePassword', data);
+        axios_1.default(config).then((response) => {
+            socket.emit('PasswordChanged', response.data);
+        }).catch((error) => {
+            console.log(error.response);
+        });
+    });
+    socket.on('changeUsername', function (data) {
+        const config = auth_routes_1.axiosConfig(config_1.notiServer + '/changeUsername', data);
+        axios_1.default(config).then((response) => {
+            socket.emit('UsernameChanged', response.data);
+        }).catch((error) => {
+            console.log(error.response);
+        });
+    });
+    socket.on('changeLanguage', function (data) {
+        const config = auth_routes_1.axiosConfig(config_1.notiServer + '/changeLanguage', data);
+        axios_1.default(config).then((response) => {
+            socket.emit('LanguageChanged', response.data);
+        }).catch((error) => {
+            console.log(error.response);
+        });
     });
     socket.on('disconnect', () => {
         const user = users.filter(e => e.socket === socket.id)[0];

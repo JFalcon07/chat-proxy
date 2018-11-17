@@ -7,7 +7,6 @@ import * as socketIo from 'socket.io';
 import * as http from 'http';
 
 import './auth-routes';
-import { connect } from "net";
 
 const port = 3000;
 const app = express();
@@ -27,12 +26,21 @@ app.use(function(req, res, next) {
 app.use('/',router);
 
 app.post('/users',async (req,res)=>{
-        const config: AxiosRequestConfig = axiosConfig(notiServer+'/getUserList',req.body);
+        const config: AxiosRequestConfig = axiosConfig(notiServer+'/getUserList', req.body);
         axios(config).then((response=>{
             res.send(response.data);
         })).catch((error)=>{
             res.send(error.response.data);
         });
+})
+
+app.post('/userInfo',async (req,res)=>{
+    const config: AxiosRequestConfig = axiosConfig(notiServer+'/getUser', req.body);
+    axios(config).then((response=>{
+        res.send(response.data);
+    })).catch((error)=>{
+        res.send(error.response.data);
+    });
 })
 
 app.post('/contacts',(req,res)=>{
@@ -97,9 +105,11 @@ io.on('connection', (socket) => {
     });
 
     socket.on('linkUser', function(data) {
-        users.forEach((element) => {
-            socket.emit('online', element.user);
-        });
+        if(users.length > 0){
+            users.forEach((element) => {
+                socket.emit('online', element.user);
+            });
+        }
         const user = {
             socket: socket.id,
             user: data
@@ -116,12 +126,20 @@ io.on('connection', (socket) => {
                 for(let i = 0;i<users.length;i++) {
                     if(user._id === users[i].user){
                         io.to(`${users[i].socket}`).emit('addedUser', response.data);
+                        
                     }
                 }
             })
+            for(let i = 0;i<users.length;i++) {
+                if(response.data.participants[1]._id === users[i].user){
+                    io.to(`${users[i].socket}`).emit('online', response.data.participants[0]._id);
+                    socket.broadcast.emit('online', response.data.participants[1]._id);
+                }
+            }
             return false;
         }
         socket.emit('addedUser',response.data);
+        
         })).catch((error)=>{
             console.log(error.response);
         });
@@ -150,6 +168,44 @@ io.on('connection', (socket) => {
     socket.on('leave', function(data) {
         socket.leaveAll()
         socket.broadcast.to(data).emit('joined', {sender: null, message:`hello fron ${data}`});
+    });
+
+    socket.on('remove', function(data) {
+        const config: AxiosRequestConfig = axiosConfig(notiServer+'/remove',data);
+        axios(config).then(()=>{
+            const other = users.filter(e => e.user == data.contact)[0];
+            if(other){
+                io.to(`${other.socket}`).emit('removedContact', { user: data.user, conversation: data.conversation});
+            }
+            socket.emit('removedContact', { user: data.contact, conversation: data.conversation})
+        }).catch((error)=>{
+            console.log(error.response);
+        });
+    });
+    
+    socket.on('changePassword', function(data) {
+        const config: AxiosRequestConfig = axiosConfig(authServer+'/changePassword',data);
+        axios(config).then((response)=>{
+            socket.emit('PasswordChanged',response.data)
+        }).catch((error)=>{
+            console.log(error.response);
+        });
+    });
+    socket.on('changeUsername', function(data) {
+        const config: AxiosRequestConfig = axiosConfig(notiServer+'/changeUsername',data);
+        axios(config).then((response)=>{
+            socket.emit('UsernameChanged',response.data)
+        }).catch((error)=>{
+            console.log(error.response);
+        });
+    });
+    socket.on('changeLanguage', function(data) {
+        const config: AxiosRequestConfig = axiosConfig(notiServer+'/changeLanguage',data);
+        axios(config).then((response)=>{
+            socket.emit('LanguageChanged',response.data)
+        }).catch((error)=>{
+            console.log(error.response);
+        });
     });
 
     socket.on('disconnect', () => {
