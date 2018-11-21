@@ -29,8 +29,8 @@ app.use(function (req, res, next) {
     res.header("Access-Control-Allow-Headers", "*");
     next();
 });
-app.use('/', auth_routes_1.router);
-app.post('/users', (req, res) => __awaiter(this, void 0, void 0, function* () {
+app.use('/api', auth_routes_1.router);
+app.post('/api/users', (req, res) => __awaiter(this, void 0, void 0, function* () {
     const config = auth_routes_1.axiosConfig(config_1.notiServer + '/getUserList', req.body);
     axios_1.default(config).then((response => {
         res.send(response.data);
@@ -38,7 +38,7 @@ app.post('/users', (req, res) => __awaiter(this, void 0, void 0, function* () {
         res.send(error.response.data);
     });
 }));
-app.post('/userInfo', (req, res) => __awaiter(this, void 0, void 0, function* () {
+app.post('/api/userInfo', (req, res) => __awaiter(this, void 0, void 0, function* () {
     const config = auth_routes_1.axiosConfig(config_1.notiServer + '/getUser', req.body);
     axios_1.default(config).then((response => {
         res.send(response.data);
@@ -46,7 +46,7 @@ app.post('/userInfo', (req, res) => __awaiter(this, void 0, void 0, function* ()
         res.send(error.response.data);
     });
 }));
-app.post('/contacts', (req, res) => {
+app.post('/api/contacts', (req, res) => {
     const config = auth_routes_1.axiosConfig(config_1.notiServer + '/getContacts', req.body);
     axios_1.default(config).then((response => {
         res.json(response.data);
@@ -54,7 +54,7 @@ app.post('/contacts', (req, res) => {
         res.send(error.response.data);
     });
 });
-app.post('/Conversations', (req, res) => {
+app.post('/api/Conversations', (req, res) => {
     const config = auth_routes_1.axiosConfig(config_1.notiServer + '/getConversations', req.body);
     axios_1.default(config).then((response => {
         res.json(response.data);
@@ -62,7 +62,7 @@ app.post('/Conversations', (req, res) => {
         res.send(error.response.data);
     });
 });
-app.get('/conversation/:tagId', function (req, res) {
+app.get('/api/conversation/:tagId', function (req, res) {
     const config = auth_routes_1.axiosConfig(config_1.notiServer + '/getConversation', { token: req.get('Authorization'), _id: req.params.tagId });
     axios_1.default(config).then((response => {
         res.json(response.data);
@@ -70,7 +70,7 @@ app.get('/conversation/:tagId', function (req, res) {
         res.send(error.response.data);
     });
 });
-app.post('/auth', (req, res) => {
+app.post('/api/auth', (req, res) => {
     const config = {
         method: 'POST',
         url: config_1.authServer + '/auth',
@@ -97,7 +97,7 @@ io.on('connection', (socket) => {
                 type: data.type,
                 date: data.date
             };
-            io.sockets.in(data._id).emit('message', message);
+            io.sockets.in(data._id).emit('messageRecieved', message);
         }).catch((error) => {
             console.log(error.response);
         });
@@ -126,11 +126,19 @@ io.on('connection', (socket) => {
                         }
                     }
                 });
-                for (let i = 0; i < users.length; i++) {
-                    if (response.data.participants[1]._id === users[i].user) {
-                        io.to(`${users[i].socket}`).emit('online', response.data.participants[0]._id);
-                        socket.broadcast.emit('online', response.data.participants[1]._id);
+                let contact = response.data.participants.filter(user => user._id !== data.user)[0];
+                let user = response.data.participants.filter(user => user._id === data.user)[0];
+                users.forEach(element => {
+                    if (element.user === user._id) {
+                        user = element;
                     }
+                    if (element.user === contact._id) {
+                        contact = element;
+                    }
+                });
+                if (contact.socket) {
+                    io.to(`${contact.socket}`).emit('online', user.user);
+                    socket.emit('online', contact.user);
                 }
                 return false;
             }

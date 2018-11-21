@@ -23,9 +23,9 @@ app.use(function(req, res, next) {
     next();
   });
 
-app.use('/',router);
+app.use('/api',router);
 
-app.post('/users',async (req,res)=>{
+app.post('/api/users',async (req,res)=>{
         const config: AxiosRequestConfig = axiosConfig(notiServer+'/getUserList', req.body);
         axios(config).then((response=>{
             res.send(response.data);
@@ -34,7 +34,7 @@ app.post('/users',async (req,res)=>{
         });
 })
 
-app.post('/userInfo',async (req,res)=>{
+app.post('/api/userInfo',async (req,res)=>{
     const config: AxiosRequestConfig = axiosConfig(notiServer+'/getUser', req.body);
     axios(config).then((response=>{
         res.send(response.data);
@@ -43,7 +43,7 @@ app.post('/userInfo',async (req,res)=>{
     });
 })
 
-app.post('/contacts',(req,res)=>{
+app.post('/api/contacts',(req,res)=>{
     const config: AxiosRequestConfig = axiosConfig(notiServer+'/getContacts',req.body);
     axios(config).then((response=>{
         res.json(response.data);
@@ -52,7 +52,7 @@ app.post('/contacts',(req,res)=>{
     });
 })
 
-app.post('/Conversations',(req,res)=>{
+app.post('/api/Conversations',(req,res)=>{
     const config: AxiosRequestConfig = axiosConfig(notiServer+'/getConversations',req.body);
     axios(config).then((response=>{
         res.json(response.data);
@@ -61,7 +61,7 @@ app.post('/Conversations',(req,res)=>{
     });
 })
 
-app.get('/conversation/:tagId', function(req, res) {
+app.get('/api/conversation/:tagId', function(req, res) {
     const config: AxiosRequestConfig = axiosConfig(notiServer+'/getConversation',{token: req.get('Authorization'), _id: req.params.tagId});
     axios(config).then((response=>{
         res.json(response.data);
@@ -70,7 +70,7 @@ app.get('/conversation/:tagId', function(req, res) {
     });
 });
 
-app.post('/auth',(req,res)=>{
+app.post('/api/auth',(req,res)=>{
     const config: AxiosRequestConfig = {
         method: 'POST',
         url: authServer+'/auth',
@@ -98,7 +98,7 @@ io.on('connection', (socket) => {
                 type: data.type,
                 date: data.date
             }
-            io.sockets.in(data._id).emit('message',message);
+            io.sockets.in(data._id).emit('messageRecieved',message);
         }).catch((error)=>{
             console.log(error.response);
         });
@@ -130,16 +130,19 @@ io.on('connection', (socket) => {
                     }
                 }
             })
-            for(let i = 0;i<users.length;i++) {
-                if(response.data.participants[1]._id === users[i].user){
-                    io.to(`${users[i].socket}`).emit('online', response.data.participants[0]._id);
-                    socket.broadcast.emit('online', response.data.participants[1]._id);
-                }
+            let contact = response.data.participants.filter( user => user._id !== data.user)[0];
+            let user = response.data.participants.filter( user => user._id === data.user)[0];
+            users.forEach(element => {
+                if(element.user === user._id) { user = element; }
+                if(element.user === contact._id){ contact = element; }
+            });
+            if(contact.socket){
+                io.to(`${contact.socket}`).emit('online', user.user);
+                socket.emit('online', contact.user);
             }
             return false;
         }
         socket.emit('addedUser',response.data);
-        
         })).catch((error)=>{
             console.log(error.response);
         });
@@ -186,7 +189,7 @@ io.on('connection', (socket) => {
     socket.on('changePassword', function(data) {
         const config: AxiosRequestConfig = axiosConfig(authServer+'/changePassword',data);
         axios(config).then((response)=>{
-            socket.emit('PasswordChanged',response.data)
+            socket.emit('PasswordChanged',response.data);
         }).catch((error)=>{
             console.log(error.response);
         });
@@ -194,7 +197,8 @@ io.on('connection', (socket) => {
     socket.on('changeUsername', function(data) {
         const config: AxiosRequestConfig = axiosConfig(notiServer+'/changeUsername',data);
         axios(config).then((response)=>{
-            socket.emit('UsernameChanged',response.data)
+            socket.broadcast.emit('UsernameChanged',response.data);
+            socket.emit('UsernameChanged',response.data);
         }).catch((error)=>{
             console.log(error.response);
         });
@@ -202,7 +206,7 @@ io.on('connection', (socket) => {
     socket.on('changeLanguage', function(data) {
         const config: AxiosRequestConfig = axiosConfig(notiServer+'/changeLanguage',data);
         axios(config).then((response)=>{
-            socket.emit('LanguageChanged',response.data)
+            socket.emit('LanguageChanged',response.data);
         }).catch((error)=>{
             console.log(error.response);
         });
